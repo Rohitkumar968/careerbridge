@@ -1,7 +1,8 @@
 import axios from 'axios'
 
 const API_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+  import.meta.env.VITE_API_URL ||
+  'https://careerbridge-r5yo.onrender.com/api'
 
 const api = axios.create({
   baseURL: API_URL,
@@ -15,8 +16,7 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
     }
 
-    // JSON requests ke liye header set karo.
-    // FormData upload ke liye browser khud Content-Type set karega.
+    // FormData ke liye browser automatically Content-Type set karega
     if (!(config.data instanceof FormData)) {
       config.headers['Content-Type'] = 'application/json'
     }
