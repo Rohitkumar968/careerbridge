@@ -11,7 +11,7 @@ export const PostJobPage = () => {
     location: '',
     salaryMin: '',
     salaryMax: '',
-    experience: '',
+    experience: '1-3 Years',
     skills: '',
     description: '',
     responsibilities: '',
@@ -38,6 +38,10 @@ export const PostJobPage = () => {
 
     if (!formData.description.trim()) {
       newErrors.description = 'Job description is required'
+    }
+
+    if (!formData.experience) {
+      newErrors.experience = 'Required experience is required'
     }
 
     setErrors(newErrors)
@@ -85,7 +89,7 @@ export const PostJobPage = () => {
           max: Number(formData.salaryMax) || 0,
         },
 
-        experienceLevel: formData.experience.trim(),
+        experienceLevel: formData.experience,
 
         skills: formData.skills
           .split(',')
@@ -93,6 +97,7 @@ export const PostJobPage = () => {
           .filter(Boolean),
 
         description: formData.description.trim(),
+
         responsibilities: formData.responsibilities
           .split('\n')
           .map((item) => item.trim())
@@ -130,7 +135,7 @@ export const PostJobPage = () => {
           location: '',
           salaryMin: '',
           salaryMax: '',
-          experience: '',
+          experience: '1-3 Years',
           skills: '',
           description: '',
           responsibilities: '',
@@ -319,9 +324,8 @@ export const PostJobPage = () => {
                 />
               </div>
 
-              <Input
+              <Select
                 label="Required Experience"
-                placeholder="e.g., 2+ years"
                 value={formData.experience}
                 onChange={(e) =>
                   handleChange(
@@ -329,6 +333,28 @@ export const PostJobPage = () => {
                     e.target.value
                   )
                 }
+                options={[
+                  {
+                    value: '0-1 Years',
+                    label: '0-1 Years',
+                  },
+                  {
+                    value: '1-3 Years',
+                    label: '1-3 Years',
+                  },
+                  {
+                    value: '3-5 Years',
+                    label: '3-5 Years',
+                  },
+                  {
+                    value: '5-8 Years',
+                    label: '5-8 Years',
+                  },
+                  {
+                    value: '8+ Years',
+                    label: '8+ Years',
+                  },
+                ]}
               />
             </div>
           </div>
