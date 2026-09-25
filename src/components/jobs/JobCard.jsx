@@ -207,7 +207,7 @@ const JobCard = ({
 
           <span>
             {salaryMin || salaryMax
-              ? `$${Number(salaryMin).toLocaleString()} - $${Number(salaryMax).toLocaleString()}`
+              ? `₹${Number(salaryMin).toLocaleString('en-IN')} - ₹${Number(salaryMax).toLocaleString('en-IN')}`
               : 'Salary not specified'}
           </span>
         </div>
