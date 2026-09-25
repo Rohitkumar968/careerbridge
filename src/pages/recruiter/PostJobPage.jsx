@@ -84,11 +84,9 @@ export const PostJobPage = () => {
         workMode: formData.workMode,
         location: formData.location.trim(),
 
-        salary: {
-          min: Number(formData.salaryMin) || 0,
-          max: Number(formData.salaryMax) || 0,
-        },
-
+        salaryMin: Number(formData.salaryMin) || 0,
+        salaryMax: Number(formData.salaryMax) || 0,
+        
         experienceLevel: formData.experience,
 
         skills: formData.skills
