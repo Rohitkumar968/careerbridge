@@ -5,7 +5,6 @@ import React, {
 } from 'react'
 
 import { useSelector } from 'react-redux'
-import axios from 'axios'
 
 import {
   Card,
@@ -16,24 +15,14 @@ import {
   ApplicationCard,
 } from '../../components/applications'
 
-const API_URL = '/api/applications'
+// =====================================================
+// PRODUCTION API
+// =====================================================
+
+const API_URL =
+  'https://careerbridge-r5yo.onrender.com/api/applications'
 
 const ITEMS_PER_PAGE = 6
-
-// =====================================================
-// AUTH CONFIG
-// =====================================================
-
-const getAuthConfig = () => {
-  const token = localStorage.getItem('token')
-
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  }
-}
 
 // =====================================================
 // NORMALIZE STATUS
@@ -94,43 +83,73 @@ export const ApplicationsPage = () => {
           localStorage.getItem('token')
 
         if (!authToken) {
+          setApplications([])
           setError(
             'Please login again.'
           )
           return
         }
 
-        const response =
-          await axios.get(
-            `${API_URL}/my?_t=${Date.now()}`,
-            {
-              headers: {
-                Authorization:
-                  `Bearer ${authToken}`,
-                'Content-Type':
-                  'application/json',
-              },
-            }
-          )
-
-        const data =
-          response.data?.data || []
-
-        console.log(
-          'My applications:',
-          data
+        const response = await fetch(
+          `${API_URL}/my?_t=${Date.now()}`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization:
+                `Bearer ${authToken}`,
+              'Content-Type':
+                'application/json',
+            },
+          }
         )
 
-        setApplications(data)
+        const result =
+          await response.json()
+
+        console.log(
+          'My applications API:',
+          result
+        )
+
+        if (!response.ok) {
+          throw new Error(
+            result?.message ||
+              'Failed to load applications'
+          )
+        }
+
+        // Backend response:
+        // {
+        //   success: true,
+        //   data: [...],
+        //   pagination: {...}
+        // }
+
+        const applicationData =
+          Array.isArray(result?.data)
+            ? result.data
+            : []
+
+        console.log(
+          'Applications loaded:',
+          applicationData
+        )
+
+        setApplications(
+          applicationData
+        )
+
+        setCurrentPage(1)
       } catch (err) {
         console.error(
           'Applications fetch error:',
-          err.response?.data ||
-            err.message
+          err
         )
 
+        setApplications([])
+
         setError(
-          err.response?.data?.message ||
+          err.message ||
             'Failed to load applications'
         )
       } finally {
@@ -274,7 +293,7 @@ export const ApplicationsPage = () => {
   ]
 
   // ===================================================
-  // FILTER
+  // FILTER APPLICATIONS
   // ===================================================
 
   const filteredApplications =
@@ -445,8 +464,7 @@ export const ApplicationsPage = () => {
 
       {/* APPLICATIONS */}
 
-      {paginatedApplications.length >
-      0 ? (
+      {paginatedApplications.length > 0 ? (
 
         <>
 
