@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   Calendar,
   Clock,
@@ -6,47 +6,29 @@ import {
   User,
   ExternalLink,
   X,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react'
 
 import { Card, Badge, Button } from '../../components/common'
-import { mockInterviews } from '../../data/mockData'
+import api from '../../services/api'
 
 // ==================================================
 // DATE HELPERS
 // ==================================================
 
-const parseInterviewDate = (dateString) => {
-  if (!dateString) return new Date()
-
-  // YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-    const [year, month, day] = dateString.split('-').map(Number)
-
-    return new Date(year, month - 1, day)
-  }
-
-  // DD/MM/YYYY or MM/DD/YYYY
-  if (dateString.includes('/')) {
-    const parts = dateString.split('/').map(Number)
-
-    if (parts.length === 3) {
-      const [first, second, third] = parts
-
-      // Your mock data is displayed like 11/9/2026.
-      // Treat it as DD/MM/YYYY.
-      return new Date(third, second - 1, first)
-    }
-  }
-
-  const parsed = new Date(dateString)
-
-  return Number.isNaN(parsed.getTime())
-    ? new Date()
-    : parsed
+const getInterviewDate = (interview) => {
+  return interview?.date
+    ? new Date(interview.date)
+    : null
 }
 
-const formatDisplayDate = (dateString) => {
-  const date = parseInterviewDate(dateString)
+const formatDisplayDate = (interview) => {
+  const date = getInterviewDate(interview)
+
+  if (!date || Number.isNaN(date.getTime())) {
+    return 'Date not available'
+  }
 
   return date.toLocaleDateString('en-GB', {
     day: '2-digit',
@@ -55,14 +37,17 @@ const formatDisplayDate = (dateString) => {
   })
 }
 
-const formatInputDate = (dateString) => {
-  const date = parseInterviewDate(dateString)
+const formatTime = (interview) => {
+  const date = getInterviewDate(interview)
 
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
+  if (!date || Number.isNaN(date.getTime())) {
+    return 'Time not available'
+  }
 
-  return `${year}-${month}-${day}`
+  return date.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 // ==================================================
@@ -72,23 +57,11 @@ const formatInputDate = (dateString) => {
 export const InterviewsPage = () => {
   const [activeTab, setActiveTab] = useState('upcoming')
 
-  // Keep interviews in local state so rescheduling updates the UI
-  const [interviewsData, setInterviewsData] = useState(
-    mockInterviews
-  )
+  const [interviewsData, setInterviewsData] = useState([])
 
-  // ==================================================
-  // RESCHEDULE STATE
-  // ==================================================
+  const [loading, setLoading] = useState(true)
 
-  const [showRescheduleModal, setShowRescheduleModal] =
-    useState(false)
-
-  const [selectedInterview, setSelectedInterview] =
-    useState(null)
-
-  const [rescheduleDate, setRescheduleDate] = useState('')
-  const [rescheduleTime, setRescheduleTime] = useState('')
+  const [error, setError] = useState('')
 
   // ==================================================
   // DETAILS STATE
@@ -101,24 +74,179 @@ export const InterviewsPage = () => {
     useState(null)
 
   // ==================================================
+  // LOAD MY INTERVIEWS
+  // ==================================================
+
+  const loadInterviews = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError('')
+
+      /*
+        _t prevents browser/proxy caching from returning
+        an old interview list after recruiter deletes one.
+      */
+      const response = await api.get('/interviews/my', {
+        params: {
+          _t: Date.now(),
+        },
+      })
+
+      const data = response?.data?.data || []
+
+      /*
+        Keep only valid interview objects and remove
+        duplicate records by MongoDB _id.
+      */
+      const uniqueInterviews = Array.from(
+        new Map(
+          data
+            .filter(
+              (interview) =>
+                interview &&
+                interview._id
+            )
+            .map((interview) => [
+              interview._id,
+              interview,
+            ])
+        ).values()
+      )
+
+      setInterviewsData(uniqueInterviews)
+    } catch (err) {
+      console.error(
+        'Load interviews error:',
+        err
+      )
+
+      setError(
+        err?.response?.data?.message ||
+          'Failed to load interviews.'
+      )
+
+      setInterviewsData([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // ==================================================
+  // LOAD ON PAGE OPEN
+  // ==================================================
+
+  useEffect(() => {
+    loadInterviews()
+  }, [loadInterviews])
+
+  // ==================================================
+  // REFRESH WHEN USER RETURNS TO THIS TAB
+  // ==================================================
+
+  useEffect(() => {
+    const handleFocus = () => {
+      loadInterviews()
+    }
+
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === 'visible'
+      ) {
+        loadInterviews()
+      }
+    }
+
+    window.addEventListener(
+      'focus',
+      handleFocus
+    )
+
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange
+    )
+
+    return () => {
+      window.removeEventListener(
+        'focus',
+        handleFocus
+      )
+
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibilityChange
+      )
+    }
+  }, [loadInterviews])
+
+  // ==================================================
   // CURRENT DATE
   // ==================================================
 
   const now = new Date()
 
   // ==================================================
-  // UPCOMING / PAST
+  // UPCOMING INTERVIEWS
   // ==================================================
 
-  const upcomingInterviews = interviewsData.filter(
-    (interview) =>
-      parseInterviewDate(interview.date) > now
-  )
+  const upcomingInterviews =
+    interviewsData.filter((interview) => {
+      const interviewDate =
+        getInterviewDate(interview)
 
-  const pastInterviews = interviewsData.filter(
-    (interview) =>
-      parseInterviewDate(interview.date) <= now
-  )
+      if (
+        !interviewDate ||
+        Number.isNaN(
+          interviewDate.getTime()
+        )
+      ) {
+        return false
+      }
+
+      /*
+        Upcoming should ONLY contain active scheduled
+        interviews.
+
+        Cancelled/completed interviews should never appear
+        here even if their date is in the future.
+      */
+      return (
+        interviewDate > now &&
+        (
+          interview.status === 'scheduled' ||
+          interview.status === 'rescheduled'
+        )
+      )
+    })
+
+  // ==================================================
+  // PAST INTERVIEWS
+  // ==================================================
+
+  const pastInterviews =
+    interviewsData.filter((interview) => {
+      const interviewDate =
+        getInterviewDate(interview)
+
+      if (
+        !interviewDate ||
+        Number.isNaN(
+          interviewDate.getTime()
+        )
+      ) {
+        return false
+      }
+
+      return (
+        interviewDate <= now ||
+        interview.status === 'completed' ||
+        interview.status === 'cancelled'
+      )
+    })
+
+  // ==================================================
+  // ACTIVE LIST
+  // ==================================================
 
   const interviews =
     activeTab === 'upcoming'
@@ -130,73 +258,23 @@ export const InterviewsPage = () => {
   // ==================================================
 
   const handleJoinInterview = (interview) => {
-    if (!interview.meetingLink) {
-      alert('Meeting link is not available.')
+    const meetingLink =
+      interview?.meetingLink ||
+      interview?.meetingUrl ||
+      ''
+
+    if (!meetingLink.trim()) {
+      alert(
+        'Meeting link is not available.'
+      )
       return
     }
 
     window.open(
-      interview.meetingLink,
+      meetingLink,
       '_blank',
       'noopener,noreferrer'
     )
-  }
-
-  // ==================================================
-  // OPEN RESCHEDULE MODAL
-  // ==================================================
-
-  const handleReschedule = (interview) => {
-    setSelectedInterview(interview)
-
-    setRescheduleDate(
-      formatInputDate(interview.date)
-    )
-
-    setRescheduleTime(
-      interview.time || '10:00'
-    )
-
-    setShowRescheduleModal(true)
-  }
-
-  // ==================================================
-  // CLOSE RESCHEDULE MODAL
-  // ==================================================
-
-  const handleCloseReschedule = () => {
-    setShowRescheduleModal(false)
-    setSelectedInterview(null)
-    setRescheduleDate('')
-    setRescheduleTime('')
-  }
-
-  // ==================================================
-  // SAVE RESCHEDULE
-  // ==================================================
-
-  const handleSaveReschedule = (e) => {
-    e.preventDefault()
-
-    if (!selectedInterview) return
-
-    if (!rescheduleDate || !rescheduleTime) {
-      return
-    }
-
-    setInterviewsData((previousInterviews) =>
-      previousInterviews.map((interview) =>
-        interview.id === selectedInterview.id
-          ? {
-              ...interview,
-              date: rescheduleDate,
-              time: rescheduleTime,
-            }
-          : interview
-      )
-    )
-
-    handleCloseReschedule()
   }
 
   // ==================================================
@@ -218,6 +296,79 @@ export const InterviewsPage = () => {
   }
 
   // ==================================================
+  // GET JOB TITLE
+  // ==================================================
+
+  const getJobTitle = (interview) => {
+    if (
+      interview?.job &&
+      typeof interview.job === 'object'
+    ) {
+      return (
+        interview.job.title ||
+        'Job Interview'
+      )
+    }
+
+    return 'Job Interview'
+  }
+
+  // ==================================================
+  // GET RECRUITER NAME
+  // ==================================================
+
+  const getRecruiterName = (interview) => {
+    if (
+      interview?.recruiter &&
+      typeof interview.recruiter === 'object'
+    ) {
+      return (
+        interview.recruiter.name ||
+        interview.recruiter.email ||
+        'Recruiter'
+      )
+    }
+
+    return 'Recruiter'
+  }
+
+  // ==================================================
+  // GET LOCATION
+  // ==================================================
+
+  const getLocation = (interview) => {
+    if (
+      interview?.job &&
+      typeof interview.job === 'object'
+    ) {
+      return (
+        interview.job.location ||
+        'Online'
+      )
+    }
+
+    return 'Online'
+  }
+
+  // ==================================================
+  // LOADING
+  // ==================================================
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 mx-auto mb-4 text-primary-600 animate-spin" />
+
+          <p className="text-gray-600 dark:text-gray-400">
+            Loading your interviews...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ==================================================
   // RETURN
   // ==================================================
 
@@ -228,27 +379,69 @@ export const InterviewsPage = () => {
           PAGE HEADER
       ================================================== */}
 
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          My Interviews
-        </h1>
+      <div className="flex items-start justify-between gap-4">
 
-        <p className="text-gray-600 dark:text-gray-400">
-          Manage your scheduled interviews
-        </p>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            My Interviews
+          </h1>
+
+          <p className="text-gray-600 dark:text-gray-400">
+            Manage your scheduled interviews
+          </p>
+        </div>
+
+        {/* REFRESH BUTTON */}
+
+        <Button
+          variant="outline"
+          onClick={loadInterviews}
+        >
+          <Loader2 className="w-4 h-4 mr-2 hidden" />
+
+          Refresh
+        </Button>
+
       </div>
+
+      {/* ==================================================
+          ERROR
+      ================================================== */}
+
+      {error && (
+        <Card>
+          <div className="flex items-start gap-3">
+
+            <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
+
+            <div>
+              <p className="font-medium text-red-600 dark:text-red-400">
+                Unable to load interviews
+              </p>
+
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                {error}
+              </p>
+            </div>
+
+          </div>
+        </Card>
+      )}
 
       {/* ==================================================
           TABS
       ================================================== */}
 
       <Card>
+
         <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700 pb-4">
 
           {/* UPCOMING */}
 
           <button
-            onClick={() => setActiveTab('upcoming')}
+            onClick={() =>
+              setActiveTab('upcoming')
+            }
             className={`px-4 py-2 font-medium transition-colors ${
               activeTab === 'upcoming'
                 ? 'text-primary-600 dark:text-primary-400 border-b-2 border-primary-600'
@@ -261,7 +454,9 @@ export const InterviewsPage = () => {
           {/* PAST */}
 
           <button
-            onClick={() => setActiveTab('past')}
+            onClick={() =>
+              setActiveTab('past')
+            }
             className={`px-4 py-2 font-medium transition-colors ${
               activeTab === 'past'
                 ? 'text-primary-600 dark:text-primary-400 border-b-2 border-primary-600'
@@ -272,6 +467,7 @@ export const InterviewsPage = () => {
           </button>
 
         </div>
+
       </Card>
 
       {/* ==================================================
@@ -284,7 +480,9 @@ export const InterviewsPage = () => {
 
           {interviews.map((interview) => (
 
-            <Card key={interview.id}>
+            <Card
+              key={interview._id}
+            >
 
               {/* ==================================================
                   HEADER
@@ -295,20 +493,24 @@ export const InterviewsPage = () => {
                 <div>
 
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {interview.position}
+                    {getJobTitle(interview)}
                   </h3>
 
                   <p className="text-gray-600 dark:text-gray-400">
-                    {interview.company}
+                    {getRecruiterName(interview)}
                   </p>
 
                 </div>
 
                 <Badge
                   variant={
-                    activeTab === 'upcoming'
-                      ? 'primary'
-                      : 'gray'
+                    interview.status ===
+                    'cancelled'
+                      ? 'gray'
+                      : interview.status ===
+                          'completed'
+                        ? 'gray'
+                        : 'primary'
                   }
                 >
                   {interview.status}
@@ -335,7 +537,9 @@ export const InterviewsPage = () => {
                     </p>
 
                     <p className="font-medium text-gray-900 dark:text-white">
-                      {formatDisplayDate(interview.date)}
+                      {formatDisplayDate(
+                        interview
+                      )}
                     </p>
 
                   </div>
@@ -355,7 +559,9 @@ export const InterviewsPage = () => {
                     </p>
 
                     <p className="font-medium text-gray-900 dark:text-white">
-                      {interview.time}
+                      {formatTime(
+                        interview
+                      )}
                     </p>
 
                   </div>
@@ -375,14 +581,15 @@ export const InterviewsPage = () => {
                     </p>
 
                     <p className="font-medium text-gray-900 dark:text-white">
-                      {interview.type}
+                      {interview.interviewType ||
+                        'Google Meet'}
                     </p>
 
                   </div>
 
                 </div>
 
-                {/* INTERVIEWER */}
+                {/* LOCATION */}
 
                 <div className="flex items-center gap-3">
 
@@ -391,11 +598,13 @@ export const InterviewsPage = () => {
                   <div>
 
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Interviewer
+                      Location
                     </p>
 
                     <p className="font-medium text-gray-900 dark:text-white">
-                      {interview.interviewer}
+                      {getLocation(
+                        interview
+                      )}
                     </p>
 
                   </div>
@@ -410,47 +619,33 @@ export const InterviewsPage = () => {
 
               <div className="flex flex-col sm:flex-row gap-3">
 
-                {/* JOIN INTERVIEW */}
+                {/* JOIN */}
 
-                {activeTab === 'upcoming' && (
+                {activeTab === 'upcoming' &&
+                  interview.status !==
+                    'cancelled' &&
+                  interview.status !==
+                    'completed' && (
 
-                  <Button
-                    variant="primary"
-                    className="flex-1"
-                    onClick={() =>
-                      handleJoinInterview(interview)
-                    }
-                  >
+                    <Button
+                      variant="primary"
+                      className="flex-1"
+                      onClick={() =>
+                        handleJoinInterview(
+                          interview
+                        )
+                      }
+                    >
 
-                    <Video className="w-4 h-4 mr-2" />
+                      <Video className="w-4 h-4 mr-2" />
 
-                    Join Interview
+                      Join Interview
 
-                    <ExternalLink className="w-4 h-4 ml-2" />
+                      <ExternalLink className="w-4 h-4 ml-2" />
 
-                  </Button>
+                    </Button>
 
-                )}
-
-                {/* RESCHEDULE */}
-
-                {activeTab === 'upcoming' && (
-
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={() =>
-                      handleReschedule(interview)
-                    }
-                  >
-
-                    <Calendar className="w-4 h-4 mr-2" />
-
-                    Reschedule
-
-                  </Button>
-
-                )}
+                  )}
 
                 {/* VIEW DETAILS */}
 
@@ -458,7 +653,9 @@ export const InterviewsPage = () => {
                   variant="outline"
                   className="flex-1"
                   onClick={() =>
-                    handleViewDetails(interview)
+                    handleViewDetails(
+                      interview
+                    )
                   }
                 >
                   View Details
@@ -495,286 +692,133 @@ export const InterviewsPage = () => {
       )}
 
       {/* ==================================================
-          RESCHEDULE MODAL
+          DETAILS MODAL
       ================================================== */}
 
-      {showRescheduleModal && selectedInterview && (
+      {showDetailsModal &&
+        selectedDetails && (
 
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
 
-          {/* BACKDROP */}
+            {/* BACKDROP */}
 
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={handleCloseReschedule}
-          />
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={
+                handleCloseDetails
+              }
+            />
 
-          {/* MODAL */}
+            {/* MODAL */}
 
-          <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl">
+            <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
 
-            {/* HEADER */}
+              {/* HEADER */}
 
-            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-gray-700">
 
-              <div>
+                <div>
 
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Reschedule Interview
-                </h2>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Interview Details
+                  </h2>
 
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  Select a new date and time
-                </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Complete interview information
+                  </p>
+
+                </div>
+
+                <button
+                  onClick={
+                    handleCloseDetails
+                  }
+                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
 
               </div>
 
-              <button
-                onClick={handleCloseReschedule}
-                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-            </div>
-
-            {/* FORM */}
-
-            <form onSubmit={handleSaveReschedule}>
+              {/* BODY */}
 
               <div className="p-6 space-y-5">
 
-                {/* INTERVIEW INFO */}
+                {/* POSITION */}
 
-                <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
+                <div>
 
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Interview
+                    Position
                   </p>
 
-                  <p className="font-semibold text-gray-900 dark:text-white mt-1">
-                    {selectedInterview.position}
-                  </p>
-
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {selectedInterview.company}
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {getJobTitle(
+                      selectedDetails
+                    )}
                   </p>
 
                 </div>
 
-                {/* DATE */}
+                {/* INTERVIEWER */}
 
                 <div>
 
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    New Date
-                  </label>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Interviewer
+                  </p>
 
-                  <div className="relative">
-
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-
-                    <input
-                      type="date"
-                      value={rescheduleDate}
-                      min={new Date().toISOString().split('T')[0]}
-                      onChange={(e) =>
-                        setRescheduleDate(e.target.value)
-                      }
-                      required
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-
-                  </div>
-
-                </div>
-
-                {/* TIME */}
-
-                <div>
-
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    New Time
-                  </label>
-
-                  <div className="relative">
-
-                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-
-                    <input
-                      type="time"
-                      value={rescheduleTime}
-                      onChange={(e) =>
-                        setRescheduleTime(e.target.value)
-                      }
-                      required
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-
-                  </div>
-
-                </div>
-
-                {/* NOTE */}
-
-                <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 p-4">
-
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                    Your interview schedule will be updated with the new date and time.
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {getRecruiterName(
+                      selectedDetails
+                    )}
                   </p>
 
                 </div>
 
-              </div>
+                {/* DATE & TIME */}
 
-              {/* FOOTER */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-              <div className="flex gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={handleCloseReschedule}
-                >
-                  Cancel
-                </Button>
+                    <div className="flex items-center gap-2 mb-2">
 
-                <Button
-                  type="submit"
-                  variant="primary"
-                  className="flex-1"
-                >
-                  Save Changes
-                </Button>
+                      <Calendar className="w-4 h-4 text-primary-600" />
 
-              </div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Date
+                      </p>
 
-            </form>
+                    </div>
 
-          </div>
-
-        </div>
-
-      )}
-
-      {/* ==================================================
-          VIEW DETAILS MODAL
-      ================================================== */}
-
-      {showDetailsModal && selectedDetails && (
-
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-
-          {/* BACKDROP */}
-
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={handleCloseDetails}
-          />
-
-          {/* MODAL */}
-
-          <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl">
-
-            {/* HEADER */}
-
-            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 dark:border-gray-700">
-
-              <div>
-
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Interview Details
-                </h2>
-
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  Complete interview information
-                </p>
-
-              </div>
-
-              <button
-                onClick={handleCloseDetails}
-                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-            </div>
-
-            {/* BODY */}
-
-            <div className="p-6 space-y-5">
-
-              {/* POSITION */}
-
-              <div>
-
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Position
-                </p>
-
-                <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {selectedDetails.position}
-                </p>
-
-              </div>
-
-              {/* COMPANY */}
-
-              <div>
-
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Company
-                </p>
-
-                <p className="font-medium text-gray-900 dark:text-white">
-                  {selectedDetails.company}
-                </p>
-
-              </div>
-
-              {/* DETAILS GRID */}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                {/* DATE */}
-
-                <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
-
-                  <div className="flex items-center gap-2 mb-2">
-
-                    <Calendar className="w-4 h-4 text-primary-600" />
-
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Date
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      {formatDisplayDate(
+                        selectedDetails
+                      )}
                     </p>
 
                   </div>
 
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {formatDisplayDate(selectedDetails.date)}
-                  </p>
+                  <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
 
-                </div>
+                    <div className="flex items-center gap-2 mb-2">
 
-                {/* TIME */}
+                      <Clock className="w-4 h-4 text-primary-600" />
 
-                <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Time
+                      </p>
 
-                  <div className="flex items-center gap-2 mb-2">
+                    </div>
 
-                    <Clock className="w-4 h-4 text-primary-600" />
-
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Time
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      {formatTime(
+                        selectedDetails
+                      )}
                     </p>
 
                   </div>
-
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {selectedDetails.time}
-                  </p>
 
                 </div>
 
@@ -793,105 +837,143 @@ export const InterviewsPage = () => {
                   </div>
 
                   <p className="font-semibold text-gray-900 dark:text-white">
-                    {selectedDetails.type}
+                    {selectedDetails.interviewType ||
+                      'Google Meet'}
                   </p>
 
                 </div>
 
-                {/* INTERVIEWER */}
+                {/* LOCATION */}
 
                 <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
 
-                  <div className="flex items-center gap-2 mb-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Location
+                  </p>
 
-                    <User className="w-4 h-4 text-primary-600" />
+                  <p className="font-semibold text-gray-900 dark:text-white mt-1">
+                    {getLocation(
+                      selectedDetails
+                    )}
+                  </p>
+
+                </div>
+
+                {/* STATUS */}
+
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
+
+                  <div>
 
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Interviewer
+                      Interview Status
+                    </p>
+
+                    <p className="font-semibold text-gray-900 dark:text-white mt-1 capitalize">
+                      {
+                        selectedDetails.status
+                      }
                     </p>
 
                   </div>
 
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {selectedDetails.interviewer}
-                  </p>
-
-                </div>
-
-              </div>
-
-              {/* STATUS */}
-
-              <div className="flex items-center justify-between rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
-
-                <div>
-
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Interview Status
-                  </p>
-
-                  <p className="font-semibold text-gray-900 dark:text-white mt-1 capitalize">
-                    {selectedDetails.status}
-                  </p>
-
-                </div>
-
-                <Badge variant="primary">
-                  {selectedDetails.status}
-                </Badge>
-
-              </div>
-
-              {/* MEETING */}
-
-              {selectedDetails.meetingLink && (
-
-                <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                    Meeting
-                  </p>
-
-                  <button
-                    onClick={() =>
-                      handleJoinInterview(selectedDetails)
+                  <Badge
+                    variant={
+                      selectedDetails.status ===
+                        'cancelled'
+                        ? 'gray'
+                        : selectedDetails.status ===
+                            'completed'
+                          ? 'gray'
+                          : 'primary'
                     }
-                    className="flex items-center gap-2 text-primary-600 dark:text-primary-400 font-medium hover:underline"
                   >
-
-                    <Video className="w-4 h-4" />
-
-                    Join Interview
-
-                    <ExternalLink className="w-4 h-4" />
-
-                  </button>
+                    {
+                      selectedDetails.status
+                    }
+                  </Badge>
 
                 </div>
 
-              )}
+                {/* NOTES */}
 
-            </div>
+                {selectedDetails.notes && (
 
-            {/* FOOTER */}
+                  <div>
 
-            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                      Notes
+                    </p>
 
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={handleCloseDetails}
-              >
-                Close
-              </Button>
+                    <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
+
+                      <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                        {
+                          selectedDetails.notes
+                        }
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                )}
+
+                {/* MEETING */}
+
+                {(selectedDetails.meetingLink ||
+                  selectedDetails.meetingUrl) && (
+
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                      Meeting
+                    </p>
+
+                    <Button
+                      variant="primary"
+                      onClick={() =>
+                        handleJoinInterview(
+                          selectedDetails
+                        )
+                      }
+                    >
+
+                      <Video className="w-4 h-4 mr-2" />
+
+                      Join Interview
+
+                      <ExternalLink className="w-4 h-4 ml-2" />
+
+                    </Button>
+
+                  </div>
+
+                )}
+
+              </div>
+
+              {/* FOOTER */}
+
+              <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={
+                    handleCloseDetails
+                  }
+                >
+                  Close
+                </Button>
+
+              </div>
 
             </div>
 
           </div>
 
-        </div>
-
-      )}
+        )}
 
     </div>
   )

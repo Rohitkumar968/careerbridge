@@ -1,19 +1,69 @@
 const express = require('express')
 const router = express.Router()
+
 const {
-  scheduleInterview, getInterviews, getInterviewById,
-  updateInterview, cancelInterview, rescheduleInterview, deleteInterview,
+  createInterview,
+  getRecruiterInterviews,
+  getMyInterviews,
+  getInterviewById,
+  cancelInterview,
+  completeInterview,
+  deleteInterview,
 } = require('../controllers/interviewController')
-const { protect, authorize } = require('../middleware/authMiddleware')
+
+const {
+  protect,
+  authorize,
+} = require('../middleware/authMiddleware')
 
 router.use(protect)
 
-router.get('/', getInterviews)
-router.get('/:id', getInterviewById)
-router.post('/', authorize('recruiter', 'admin'), scheduleInterview)
-router.put('/:id', authorize('recruiter', 'admin'), updateInterview)
-router.post('/:id/cancel', authorize('recruiter', 'admin'), cancelInterview)
-router.post('/:id/reschedule', authorize('recruiter', 'admin'), rescheduleInterview)
-router.delete('/:id', authorize('recruiter', 'admin'), deleteInterview)
+// CREATE INTERVIEW
+router.post(
+  '/',
+  authorize('recruiter', 'admin'),
+  createInterview
+)
+
+// RECRUITER INTERVIEWS
+router.get(
+  '/recruiter',
+  authorize('recruiter', 'admin'),
+  getRecruiterInterviews
+)
+
+// CANCEL INTERVIEW
+router.patch(
+  '/:id/cancel',
+  authorize('recruiter', 'admin'),
+  cancelInterview
+)
+
+// COMPLETE INTERVIEW
+router.patch(
+  '/:id/complete',
+  authorize('recruiter', 'admin'),
+  completeInterview
+)
+
+// DELETE INTERVIEW
+router.delete(
+  '/:id',
+  authorize('recruiter', 'admin'),
+  deleteInterview
+)
+
+// CANDIDATE INTERVIEWS
+router.get(
+  '/my',
+  authorize('seeker', 'job_seeker'),
+  getMyInterviews
+)
+
+// SINGLE INTERVIEW
+router.get(
+  '/:id',
+  getInterviewById
+)
 
 module.exports = router

@@ -1,191 +1,664 @@
 const Interview = require('../models/Interview')
 const Application = require('../models/Application')
-const createNotification = require('../utils/createNotification')
+const Job = require('../models/Job')
 
-// POST /api/interviews
-const scheduleInterview = async (req, res, next) => {
+// =====================================================
+// CREATE INTERVIEW
+// =====================================================
+
+const createInterview = async (req, res, next) => {
   try {
-    const { applicationId, date, startTime, endTime, meetingLink, notes } = req.body
+    const {
+      candidate,
+      recruiter,
+      job,
+      application,
+      date,
+      interviewType,
+      meetingLink,
+      notes,
+    } = req.body
 
-    const application = await Application.findById(applicationId).populate('job', 'title recruiter')
-    if (!application) return res.status(404).json({ success: false, message: 'Application not found' })
+    // -------------------------------------------------
+    // REQUIRED FIELDS
+    // -------------------------------------------------
 
-    if (application.job.recruiter.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, message: 'Not authorized' })
+    if (!candidate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Candidate is required',
+      })
     }
+
+    if (!job) {
+      return res.status(400).json({
+        success: false,
+        message: 'Job is required',
+      })
+    }
+
+    if (!application) {
+      return res.status(400).json({
+        success: false,
+        message: 'Application is required',
+      })
+    }
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Interview date is required',
+      })
+    }
+
+    // -------------------------------------------------
+    // DATE VALIDATION
+    // -------------------------------------------------
+
+    const interviewDate = new Date(date)
+
+    if (Number.isNaN(interviewDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid interview date',
+      })
+    }
+
+    if (interviewDate <= new Date()) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Interview date and time must be in the future',
+      })
+    }
+
+    // -------------------------------------------------
+    // FIND APPLICATION
+    // -------------------------------------------------
+
+    const existingApplication =
+      await Application.findById(application)
+
+    if (!existingApplication) {
+      return res.status(404).json({
+        success: false,
+        message: 'Application not found',
+      })
+    }
+
+    // -------------------------------------------------
+    // FIND JOB
+    // -------------------------------------------------
+
+    const existingJob = await Job.findById(job)
+
+    if (!existingJob) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job not found',
+      })
+    }
+
+    // -------------------------------------------------
+    // RECRUITER OWNERSHIP
+    // -------------------------------------------------
+
+    if (
+      req.user.role !== 'admin' &&
+      existingJob.recruiter?.toString() !==
+        req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'You are not authorized to schedule an interview for this job',
+      })
+    }
+
+    // -------------------------------------------------
+    // CHECK APPLICATION BELONGS TO JOB
+    // -------------------------------------------------
+
+    if (
+      existingApplication.job?.toString() !==
+      existingJob._id.toString()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Application does not belong to this job',
+      })
+    }
+
+    // -------------------------------------------------
+    // CHECK CANDIDATE
+    // -------------------------------------------------
+
+    if (
+      existingApplication.applicant?.toString() !==
+      candidate.toString()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Candidate does not belong to this application',
+      })
+    }
+
+    // -------------------------------------------------
+    // CHECK EXISTING INTERVIEW
+    // -------------------------------------------------
+
+    const existingInterview =
+      await Interview.findOne({
+        application,
+        status: {
+          $in: ['scheduled', 'rescheduled'],
+        },
+      })
+
+    if (existingInterview) {
+      return res.status(409).json({
+        success: false,
+        message:
+          'An active interview already exists for this application',
+      })
+    }
+
+    // -------------------------------------------------
+    // ONLINE INTERVIEW LINK
+    // -------------------------------------------------
+
+    const onlineInterviewTypes = [
+      'Google Meet',
+      'Zoom',
+      'Microsoft Teams',
+    ]
+
+    if (
+      onlineInterviewTypes.includes(
+        interviewType
+      ) &&
+      !meetingLink
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Meeting link is required for online interviews',
+      })
+    }
+
+    // -------------------------------------------------
+    // CREATE INTERVIEW
+    // -------------------------------------------------
 
     const interview = await Interview.create({
-      application: applicationId,
-      candidate: application.applicant,
+      candidate,
       recruiter: req.user._id,
-      job: application.job._id,
-      date,
-      startTime,
-      endTime: endTime || '',
+      job,
+      application,
+      date: interviewDate,
+      interviewType:
+        interviewType || 'Google Meet',
       meetingLink: meetingLink || '',
       notes: notes || '',
+      status: 'scheduled',
     })
 
-    // Update application status to interview
-    application.status = 'interview'
-    await application.save()
+    // -------------------------------------------------
+    // UPDATE APPLICATION STATUS
+    // -------------------------------------------------
 
-    await createNotification(
-      application.applicant,
-      'Interview Scheduled',
-      `An interview has been scheduled for ${application.job.title} on ${new Date(date).toLocaleDateString()}.`,
-      'interview',
-      interview._id
-    )
+    existingApplication.status = 'interview'
+    await existingApplication.save()
 
-    await interview.populate([
-      { path: 'candidate', select: 'name email avatar' },
-      { path: 'job', select: 'title', populate: { path: 'company', select: 'name logo' } },
-    ])
+    // -------------------------------------------------
+    // RESPONSE
+    // -------------------------------------------------
 
-    res.status(201).json({ success: true, data: interview })
+    const populatedInterview =
+      await Interview.findById(interview._id)
+        .populate(
+          'candidate',
+          'name email phone profileImage'
+        )
+        .populate(
+          'recruiter',
+          'name email'
+        )
+        .populate(
+          'job',
+          'title location employmentType'
+        )
+        .populate(
+          'application',
+          'status resume coverLetter'
+        )
+
+    return res.status(201).json({
+      success: true,
+      message:
+        'Interview scheduled successfully',
+      data: populatedInterview,
+    })
   } catch (err) {
     next(err)
   }
 }
 
-// GET /api/interviews
-const getInterviews = async (req, res, next) => {
+// =====================================================
+// GET RECRUITER INTERVIEWS
+// =====================================================
+
+const getRecruiterInterviews = async (
+  req,
+  res,
+  next
+) => {
   try {
-    const { status } = req.query
-    const query = {}
+    const interviews =
+      await Interview.find({
+        recruiter: req.user._id,
+      })
+        .populate(
+          'candidate',
+          'name email phone profileImage'
+        )
+        .populate(
+          'job',
+          'title location employmentType'
+        )
+        .populate(
+          'application',
+          'status resume coverLetter'
+        )
+        .sort({ date: 1 })
 
-    if (req.user.role === 'seeker') query.candidate = req.user._id
-    else if (req.user.role === 'recruiter') query.recruiter = req.user._id
-
-    if (status) query.status = status
-
-    const interviews = await Interview.find(query)
-      .populate('candidate', 'name email avatar')
-      .populate('recruiter', 'name email')
-      .populate({ path: 'job', select: 'title', populate: { path: 'company', select: 'name logo' } })
-      .sort('-date')
-
-    res.json({ success: true, data: interviews })
+    return res.json({
+      success: true,
+      data: interviews,
+    })
   } catch (err) {
     next(err)
   }
 }
 
-// GET /api/interviews/:id
-const getInterviewById = async (req, res, next) => {
+// =====================================================
+// GET MY INTERVIEWS - SEEKER
+// =====================================================
+
+const getMyInterviews = async (
+  req,
+  res,
+  next
+) => {
   try {
-    const interview = await Interview.findById(req.params.id)
-      .populate('candidate', 'name email avatar phone')
-      .populate('recruiter', 'name email')
-      .populate({ path: 'job', populate: { path: 'company', select: 'name logo' } })
+    const interviews =
+      await Interview.find({
+        candidate: req.user._id,
+      })
+        .populate(
+          'candidate',
+          'name email phone profileImage'
+        )
+        .populate(
+          'recruiter',
+          'name email'
+        )
+        .populate(
+          'job',
+          'title location employmentType company'
+        )
+        .populate(
+          'application',
+          'status resume coverLetter'
+        )
+        .sort({ date: 1 })
 
-    if (!interview) return res.status(404).json({ success: false, message: 'Interview not found' })
+    return res.json({
+      success: true,
+      data: interviews,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
 
-    const isParticipant =
-      interview.candidate._id.toString() === req.user._id.toString() ||
-      interview.recruiter._id.toString() === req.user._id.toString() ||
+// =====================================================
+// GET INTERVIEW BY ID
+// =====================================================
+
+const getInterviewById = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const interview =
+      await Interview.findById(req.params.id)
+        .populate(
+          'candidate',
+          'name email phone profileImage'
+        )
+        .populate(
+          'recruiter',
+          'name email'
+        )
+        .populate(
+          'job',
+          'title location employmentType company'
+        )
+        .populate(
+          'application',
+          'status resume coverLetter'
+        )
+
+    if (!interview) {
+      return res.status(404).json({
+        success: false,
+        message: 'Interview not found',
+      })
+    }
+
+    // -------------------------------------------------
+    // AUTHORIZATION
+    // -------------------------------------------------
+
+    const isRecruiter =
+      interview.recruiter?._id?.toString() ===
+      req.user._id.toString()
+
+    const isCandidate =
+      interview.candidate?._id?.toString() ===
+      req.user._id.toString()
+
+    const isAdmin =
       req.user.role === 'admin'
 
-    if (!isParticipant) return res.status(403).json({ success: false, message: 'Not authorized' })
+    if (
+      !isRecruiter &&
+      !isCandidate &&
+      !isAdmin
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'You are not authorized to view this interview',
+      })
+    }
 
-    res.json({ success: true, data: interview })
+    return res.json({
+      success: true,
+      data: interview,
+    })
   } catch (err) {
     next(err)
   }
 }
 
-// PUT /api/interviews/:id
-const updateInterview = async (req, res, next) => {
-  try {
-    let interview = await Interview.findById(req.params.id)
-    if (!interview) return res.status(404).json({ success: false, message: 'Interview not found' })
+// =====================================================
+// CANCEL INTERVIEW
+// =====================================================
 
-    if (interview.recruiter.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Not authorized' })
+const cancelInterview = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const interview =
+      await Interview.findById(
+        req.params.id
+      )
+
+    if (!interview) {
+      return res.status(404).json({
+        success: false,
+        message: 'Interview not found',
+      })
     }
 
-    interview = await Interview.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
-    res.json({ success: true, data: interview })
-  } catch (err) {
-    next(err)
-  }
-}
+    // -------------------------------------------------
+    // RECRUITER AUTHORIZATION
+    // -------------------------------------------------
 
-// POST /api/interviews/:id/cancel
-const cancelInterview = async (req, res, next) => {
-  try {
-    const interview = await Interview.findById(req.params.id)
-    if (!interview) return res.status(404).json({ success: false, message: 'Interview not found' })
-
-    if (interview.recruiter.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Not authorized' })
+    if (
+      req.user.role !== 'admin' &&
+      interview.recruiter.toString() !==
+        req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'You are not authorized to cancel this interview',
+      })
     }
+
+    // -------------------------------------------------
+    // ALREADY CANCELLED
+    // -------------------------------------------------
+
+    if (
+      interview.status === 'cancelled'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Interview is already cancelled',
+      })
+    }
+
+    // -------------------------------------------------
+    // UPDATE INTERVIEW
+    // -------------------------------------------------
 
     interview.status = 'cancelled'
+    interview.cancelledAt = new Date()
+
     await interview.save()
 
-    await createNotification(
-      interview.candidate,
-      'Interview Cancelled',
-      `Your interview has been cancelled.`,
-      'interview',
-      interview._id
-    )
+    // -------------------------------------------------
+    // RESET APPLICATION
+    // -------------------------------------------------
 
-    res.json({ success: true, data: interview })
+    if (interview.application) {
+      await Application.findByIdAndUpdate(
+        interview.application,
+        {
+          status: 'applied',
+        }
+      )
+    }
+
+    return res.json({
+      success: true,
+      message:
+        'Interview cancelled successfully',
+      data: interview,
+    })
   } catch (err) {
     next(err)
   }
 }
 
-// POST /api/interviews/:id/reschedule
-const rescheduleInterview = async (req, res, next) => {
-  try {
-    const { date, startTime, endTime, meetingLink } = req.body
-    const interview = await Interview.findById(req.params.id)
-    if (!interview) return res.status(404).json({ success: false, message: 'Interview not found' })
+// =====================================================
+// COMPLETE INTERVIEW
+// =====================================================
 
-    if (interview.recruiter.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Not authorized' })
+const completeInterview = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const interview =
+      await Interview.findById(
+        req.params.id
+      )
+
+    if (!interview) {
+      return res.status(404).json({
+        success: false,
+        message: 'Interview not found',
+      })
     }
 
-    if (date) interview.date = date
-    if (startTime) interview.startTime = startTime
-    if (endTime) interview.endTime = endTime
-    if (meetingLink) interview.meetingLink = meetingLink
-    interview.status = 'scheduled'
+    // -------------------------------------------------
+    // RECRUITER AUTHORIZATION
+    // -------------------------------------------------
+
+    if (
+      req.user.role !== 'admin' &&
+      interview.recruiter.toString() !==
+        req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'You are not authorized to complete this interview',
+      })
+    }
+
+    // -------------------------------------------------
+    // CHECK STATUS
+    // -------------------------------------------------
+
+    if (
+      interview.status === 'cancelled'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Cancelled interview cannot be completed',
+      })
+    }
+
+    if (
+      interview.status === 'completed'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Interview is already completed',
+      })
+    }
+
+    // -------------------------------------------------
+    // UPDATE
+    // -------------------------------------------------
+
+    interview.status = 'completed'
+    interview.completedAt = new Date()
+
     await interview.save()
 
-    await createNotification(
-      interview.candidate,
-      'Interview Rescheduled',
-      `Your interview has been rescheduled to ${new Date(interview.date).toLocaleDateString()}.`,
-      'interview',
-      interview._id
-    )
+    // -------------------------------------------------
+    // KEEP APPLICATION AS INTERVIEW
+    // Recruiter can now shortlist/reject/hire
+    // -------------------------------------------------
 
-    res.json({ success: true, data: interview })
-  } catch (err) {
-    next(err)
-  }
-}
-
-// DELETE /api/interviews/:id
-const deleteInterview = async (req, res, next) => {
-  try {
-    const interview = await Interview.findById(req.params.id)
-    if (!interview) return res.status(404).json({ success: false, message: 'Interview not found' })
-
-    if (interview.recruiter.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Not authorized' })
+    if (interview.application) {
+      await Application.findByIdAndUpdate(
+        interview.application,
+        {
+          status: 'interview',
+        }
+      )
     }
 
-    await interview.deleteOne()
-    res.json({ success: true, message: 'Interview deleted' })
+    return res.json({
+      success: true,
+      message:
+        'Interview completed successfully',
+      data: interview,
+    })
   } catch (err) {
     next(err)
   }
 }
 
-module.exports = { scheduleInterview, getInterviews, getInterviewById, updateInterview, cancelInterview, rescheduleInterview, deleteInterview }
+// =====================================================
+// DELETE INTERVIEW
+// =====================================================
+
+const deleteInterview = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const interview =
+      await Interview.findById(
+        req.params.id
+      )
+
+    if (!interview) {
+      return res.status(404).json({
+        success: false,
+        message: 'Interview not found',
+      })
+    }
+
+    // -------------------------------------------------
+    // RECRUITER AUTHORIZATION
+    // -------------------------------------------------
+
+    if (
+      req.user.role !== 'admin' &&
+      interview.recruiter.toString() !==
+        req.user._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          'You are not authorized to delete this interview',
+      })
+    }
+
+    // -------------------------------------------------
+    // DELETE
+    // -------------------------------------------------
+
+    const applicationId =
+      interview.application
+
+    await Interview.findByIdAndDelete(
+      req.params.id
+    )
+
+    // -------------------------------------------------
+    // RESET APPLICATION
+    // -------------------------------------------------
+
+    if (applicationId) {
+      await Application.findByIdAndUpdate(
+        applicationId,
+        {
+          status: 'applied',
+        }
+      )
+    }
+
+    return res.json({
+      success: true,
+      message:
+        'Interview deleted successfully',
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// =====================================================
+// EXPORTS
+// =====================================================
+
+module.exports = {
+  createInterview,
+  getRecruiterInterviews,
+  getMyInterviews,
+  getInterviewById,
+  cancelInterview,
+  completeInterview,
+  deleteInterview,
+}

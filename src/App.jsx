@@ -45,6 +45,7 @@ import {
 import {
   RecruiterDashboard,
   PostJobPage,
+  ScheduleInterviewPage,
 } from './pages/recruiter'
 
 // Admin Pages
@@ -66,12 +67,21 @@ function App() {
     <Router>
       <Routes>
 
-        {/* ================= PUBLIC ROUTES ================= */}
+        {/* =====================================================
+            PUBLIC ROUTES
+        ===================================================== */}
 
         <Route element={<PublicLayout />}>
-          <Route path="/" element={<LandingPage />} />
 
-          <Route path="/jobs" element={<JobsPage />} />
+          <Route
+            path="/"
+            element={<LandingPage />}
+          />
+
+          <Route
+            path="/jobs"
+            element={<JobsPage />}
+          />
 
           <Route
             path="/jobs/:id"
@@ -87,10 +97,13 @@ function App() {
             path="/companies/:id"
             element={<CompanyDetailsPage />}
           />
+
         </Route>
 
 
-        {/* ================= AUTH ROUTES ================= */}
+        {/* =====================================================
+            AUTH ROUTES
+        ===================================================== */}
 
         <Route
           path="/login"
@@ -113,7 +126,9 @@ function App() {
         />
 
 
-        {/* ================= JOB SEEKER ROUTES ================= */}
+        {/* =====================================================
+            JOB SEEKER ROUTES
+        ===================================================== */}
 
         <Route
           element={
@@ -123,64 +138,77 @@ function App() {
           }
         >
 
+          {/* Dashboard */}
           <Route
             path="/dashboard"
             element={<SeekerDashboard />}
           />
 
+          {/* Jobs */}
           <Route
             path="/dashboard/jobs"
             element={<JobsPage />}
           />
 
+          {/* Applications */}
           <Route
             path="/dashboard/applications"
             element={<ApplicationsPage />}
           />
+
           <Route
             path="/dashboard/applications/:id"
             element={<ApplicationDetailsPage />}
           />
 
+          {/* Interviews */}
           <Route
             path="/dashboard/interviews"
             element={<InterviewsPage />}
           />
-          <Route
-           path="/dashboard/interviews/:id"
-          element={<InterviewDetailsPage />}
-         />
 
+          <Route
+            path="/dashboard/interviews/:id"
+            element={<InterviewDetailsPage />}
+          />
+
+          {/* Resume */}
           <Route
             path="/dashboard/resume"
             element={<ResumePage />}
           />
 
+          {/* AI Assistant */}
           <Route
             path="/dashboard/ai-assistant"
             element={<AIAssistantPage />}
           />
 
+          {/* Recommended Jobs */}
           <Route
             path="/dashboard/recommended"
             element={<RecommendationsPage />}
           />
 
+          {/* Saved Jobs */}
           <Route
             path="/dashboard/saved"
             element={<SavedJobsPage />}
           />
 
+          {/* Profile */}
           <Route
             path="/profile"
             element={<ProfilePage />}
           />
 
+          {/* Notifications */}
           <Route
             path="/notifications"
             element={<NotificationsPage />}
           />
 
+          {/* Settings */}
           <Route
             path="/settings"
             element={<SettingsPage />}
@@ -189,7 +217,9 @@ function App() {
         </Route>
 
 
-        {/* ================= RECRUITER ROUTES ================= */}
+        {/* =====================================================
+            RECRUITER ROUTES
+        ===================================================== */}
 
         <Route
           element={
@@ -199,20 +229,30 @@ function App() {
           }
         >
 
+          {/* Recruiter Dashboard */}
           <Route
             path="/recruiter"
             element={<RecruiterDashboard />}
           />
 
+          {/* Post New Job */}
           <Route
             path="/recruiter/jobs/create"
             element={<PostJobPage />}
           />
 
+          {/* Schedule & Manage Interviews */}
+          <Route
+            path="/recruiter/interviews/schedule"
+            element={<ScheduleInterviewPage />}
+          />
+
         </Route>
 
 
-        {/* ================= ADMIN ROUTES ================= */}
+        {/* =====================================================
+            ADMIN ROUTES
+        ===================================================== */}
 
         <Route
           element={
@@ -230,7 +270,9 @@ function App() {
         </Route>
 
 
-        {/* ================= 404 ================= */}
+        {/* =====================================================
+            404
+        ===================================================== */}
 
         <Route
           path="*"

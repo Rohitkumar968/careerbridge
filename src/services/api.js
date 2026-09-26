@@ -6,6 +6,7 @@ import axios from 'axios'
 
 const API_URL = 'https://careerbridge-r5yo.onrender.com/api'
 
+
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,

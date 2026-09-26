@@ -18,18 +18,27 @@ const JobCard = ({
   isSaved = false,
   showMatchScore = false,
 }) => {
+  // =====================================================
+  // JOB ID
+  // IMPORTANT: Prefer MongoDB _id
+  // =====================================================
   const jobId = job?._id || job?.id
 
+  // =====================================================
+  // COMPANY
+  // =====================================================
   const companyName =
     job?.company?.name ||
-    (typeof job?.company === 'string' ? job.company : '') ||
+    (typeof job?.company === 'string'
+      ? job.company
+      : '') ||
     job?.companyName ||
     'Company'
 
-  const logo =
+  const companyLogo =
     job?.company?.logo ||
-    job?.logo ||
     job?.companyLogo ||
+    job?.logo ||
     ''
 
   const fallbackLogo =
@@ -37,206 +46,399 @@ const JobCard = ({
     encodeURIComponent(companyName) +
     '&background=6366f1&color=fff&size=128'
 
-  const logoUrl = logo || fallbackLogo
+  const logoUrl =
+    companyLogo || fallbackLogo
 
+  // =====================================================
+  // JOB INFORMATION
+  // =====================================================
   const location =
     job?.location ||
     job?.company?.location ||
     'Location not specified'
 
   const jobType =
-    job?.jobType ||
     job?.employmentType ||
+    job?.jobType ||
     'Full-time'
 
   const experience =
-    job?.experience ||
     job?.experienceLevel ||
+    job?.experience ||
     'Not specified'
 
-  const isRemote =
-    job?.remote === true ||
-    job?.workMode === 'Remote'
+  const workMode =
+    job?.workMode ||
+    (job?.remote === true
+      ? 'Remote'
+      : '')
 
+  // =====================================================
+  // SALARY
+  // Supports:
+  // salary: { min, max }
+  // salaryMin / salaryMax
+  // =====================================================
   const salaryMin =
     job?.salary?.min ??
     job?.salaryMin ??
-    0
+    null
 
   const salaryMax =
     job?.salary?.max ??
     job?.salaryMax ??
-    0
+    null
 
+  const hasSalary =
+    salaryMin !== null ||
+    salaryMax !== null
+
+  const formatSalary = (value) => {
+    if (
+      value === null ||
+      value === undefined ||
+      value === ''
+    ) {
+      return ''
+    }
+
+    if (typeof value === 'number') {
+      return value.toLocaleString('en-IN')
+    }
+
+    return value
+  }
+
+  const salaryText = (() => {
+    if (!hasSalary) {
+      return 'Salary not specified'
+    }
+
+    if (
+      salaryMin !== null &&
+      salaryMax !== null
+    ) {
+      return `${formatSalary(
+        salaryMin
+      )} - ${formatSalary(salaryMax)}`
+    }
+
+    if (salaryMin !== null) {
+      return `From ${formatSalary(
+        salaryMin
+      )}`
+    }
+
+    return `Up to ${formatSalary(
+      salaryMax
+    )}`
+  })()
+
+  // =====================================================
+  // SKILLS
+  // =====================================================
   const skills = Array.isArray(job?.skills)
     ? job.skills
     : []
 
-  const matchScore = job?.matchScore ?? 0
+  // =====================================================
+  // MATCH SCORE
+  // =====================================================
+  const matchScore =
+    job?.matchScore ??
+    job?.matchPercentage ??
+    null
 
+  // =====================================================
+  // IMAGE ERROR
+  // =====================================================
   const handleImageError = (event) => {
-    event.currentTarget.src = fallbackLogo
+    if (
+      event.currentTarget.src !==
+      fallbackLogo
+    ) {
+      event.currentTarget.src =
+        fallbackLogo
+    }
   }
 
-  const handleSave = () => {
-    if (jobId && onSave) {
+  // =====================================================
+  // SAVE / UNSAVE
+  // =====================================================
+  const handleSave = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (!jobId) {
+      console.error(
+        'Save job error: Job ID missing',
+        job
+      )
+      return
+    }
+
+    if (onSave) {
       onSave(jobId)
     }
   }
 
-  // ================================
-  // SHARE JOB
-  // ================================
-  const handleShare = async () => {
-    if (!jobId) return
+  // =====================================================
+  // SHARE
+  // =====================================================
+  const handleShare = async (event) => {
+    event.preventDefault()
+    event.stopPropagation()
 
-    const shareUrl = `${window.location.origin}/jobs/${jobId}`
+    if (!jobId) {
+      return
+    }
+
+    const shareUrl =
+      `${window.location.origin}/jobs/${jobId}`
 
     const shareData = {
-      title: job?.title || 'Job Opportunity',
-      text: `Check out this job: ${job?.title || 'Job Opportunity'} at ${companyName}`,
+      title:
+        job?.title ||
+        'Job Opportunity',
+
+      text:
+        `Check out this job: ${
+          job?.title ||
+          'Job Opportunity'
+        } at ${companyName}`,
+
       url: shareUrl,
     }
 
     try {
       // Mobile / supported browsers
       if (navigator.share) {
-        await navigator.share(shareData)
+        await navigator.share(
+          shareData
+        )
         return
       }
 
-      // Desktop fallback - copy link
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(shareUrl)
-        alert('Job link copied to clipboard!')
+      // Clipboard
+      if (
+        navigator.clipboard &&
+        window.isSecureContext
+      ) {
+        await navigator.clipboard.writeText(
+          shareUrl
+        )
+
+        alert(
+          'Job link copied to clipboard!'
+        )
+
         return
       }
 
-      // Older browser fallback
-      const textArea = document.createElement('textarea')
+      // Fallback clipboard
+      const textArea =
+        document.createElement(
+          'textarea'
+        )
+
       textArea.value = shareUrl
-      document.body.appendChild(textArea)
-      textArea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textArea)
 
-      alert('Job link copied to clipboard!')
+      document.body.appendChild(
+        textArea
+      )
+
+      textArea.select()
+
+      document.execCommand('copy')
+
+      document.body.removeChild(
+        textArea
+      )
+
+      alert(
+        'Job link copied to clipboard!'
+      )
     } catch (error) {
-      // User cancelled native share
-      if (error?.name === 'AbortError') {
+      if (
+        error?.name ===
+        'AbortError'
+      ) {
         return
       }
 
-      console.error('Job share error:', error)
+      console.error(
+        'Job share error:',
+        error
+      )
 
-      // Parent callback if provided
       if (onShare) {
         onShare(job)
       }
     }
   }
 
+  // =====================================================
+  // INVALID JOB
+  // =====================================================
+  if (!jobId) {
+    return null
+  }
+
+  // =====================================================
+  // UI
+  // =====================================================
   return (
     <div className="group bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-card hover:shadow-card-hover transition-all duration-200 p-5 flex flex-col">
 
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
+      {/* =================================================
+          HEADER
+      ================================================= */}
+      <div className="flex items-start justify-between gap-4 mb-4">
 
-        <div className="flex items-start gap-3 flex-1 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
 
+          {/* Company Logo */}
           <img
             src={logoUrl}
             alt={companyName}
             onError={handleImageError}
-            className="w-11 h-11 rounded-lg object-cover border border-slate-200 dark:border-slate-700 flex-shrink-0 bg-slate-100"
+            className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 flex-shrink-0"
           />
 
+          {/* Company */}
           <div className="min-w-0">
-
-            <h3 className="font-semibold text-slate-900 dark:text-white text-base truncate">
-              {job?.title || 'Untitled Job'}
+            <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+              {companyName}
             </h3>
 
-            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 truncate">
-              {companyName}
+            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+              {location}
             </p>
-
           </div>
 
         </div>
 
-        {showMatchScore && (
-          <div className="flex-shrink-0 ml-2 flex flex-col items-center">
-
-            <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-600">
-              <Zap className="w-3 h-3" />
+        {/* Match Score */}
+        {showMatchScore &&
+          matchScore !== null && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-xs font-semibold flex-shrink-0">
+              <Zap size={13} />
               {matchScore}%
             </div>
+          )}
 
-            <p className="text-xs text-slate-400 mt-1">
-              match
-            </p>
+      </div>
 
-          </div>
+      {/* =================================================
+          JOB TITLE
+      ================================================= */}
+      <div className="mb-4">
+
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white line-clamp-2">
+          {job?.title ||
+            'Untitled Job'}
+        </h2>
+
+        {job?.category && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {job.category}
+          </p>
         )}
 
       </div>
 
-      {/* Job information */}
-      <div className="space-y-2 mb-4 text-sm text-slate-500 dark:text-slate-400">
+      {/* =================================================
+          JOB META
+      ================================================= */}
+      <div className="space-y-2.5 mb-4">
 
-        <div className="flex items-center gap-2">
-          <MapPin className="w-4 h-4 flex-shrink-0" />
+        {/* Location */}
+        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+          <MapPin
+            size={16}
+            className="flex-shrink-0"
+          />
 
           <span className="truncate">
             {location}
-            {isRemote ? ' · Remote' : ''}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Briefcase className="w-4 h-4 flex-shrink-0" />
+        {/* Job Type */}
+        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+          <Briefcase
+            size={16}
+            className="flex-shrink-0"
+          />
 
           <span>
-            {jobType} · {experience}
+            {jobType}
+          </span>
+
+          {workMode && (
+            <>
+              <span className="text-gray-300 dark:text-gray-600">
+                •
+              </span>
+
+              <span>
+                {workMode}
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Salary */}
+        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+          <DollarSign
+            size={16}
+            className="flex-shrink-0"
+          />
+
+          <span className="truncate">
+            {salaryText}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <DollarSign className="w-4 h-4 flex-shrink-0" />
-
-          <span>
-            {salaryMin || salaryMax
-              ? `₹${Number(salaryMin).toLocaleString('en-IN')} - ₹${Number(salaryMax).toLocaleString('en-IN')}`
-              : 'Salary not specified'}
-          </span>
+        {/* Experience */}
+        <div className="text-sm text-gray-600 dark:text-gray-300">
+          <span className="font-medium">
+            Experience:
+          </span>{' '}
+          {experience}
         </div>
 
       </div>
 
-      {/* Skills */}
+      {/* =================================================
+          SKILLS
+      ================================================= */}
       {skills.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-4">
+        <div className="flex flex-wrap gap-2 mb-5">
 
-          {skills.slice(0, 3).map((skill, index) => (
-            <Badge
-              key={`${skill}-${index}`}
-              variant="gray"
-            >
-              {skill}
-            </Badge>
-          ))}
+          {skills
+            .slice(0, 5)
+            .map((skill, index) => (
+              <Badge
+                key={`${skill}-${index}`}
+                variant="secondary"
+              >
+                {skill}
+              </Badge>
+            ))}
 
-          {skills.length > 3 && (
-            <Badge variant="gray">
-              +{skills.length - 3}
-            </Badge>
+          {skills.length > 5 && (
+            <span className="text-xs text-gray-500 dark:text-gray-400 self-center">
+              +{skills.length - 5}
+            </span>
           )}
 
         </div>
       )}
 
-      {/* Actions */}
+      {/* =================================================
+          FOOTER BUTTONS
+      ================================================= */}
       <div className="flex gap-2 mt-auto">
 
         {/* View Details */}
@@ -252,30 +454,28 @@ const JobCard = ({
           </Button>
         </Link>
 
-        {/* Save */}
+        {/* Save / Unsave */}
         <button
           type="button"
           onClick={handleSave}
-          className={`p-2 rounded-lg border ${
+          title={
             isSaved
-              ? 'border-primary-300 bg-primary-50 text-primary-600'
-              : 'border-slate-300 text-slate-400 hover:text-primary-600'
+              ? 'Remove saved job'
+              : 'Save job'
+          }
+          className={`w-11 h-11 rounded-lg border flex items-center justify-center transition ${
+            isSaved
+              ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-600 dark:text-blue-400'
+              : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
           }`}
-          title={isSaved ? 'Remove bookmark' : 'Save job'}
         >
           {isSaved ? (
             <BookmarkCheck
-              style={{
-                width: '18px',
-                height: '18px',
-              }}
+              size={19}
             />
           ) : (
             <Bookmark
-              style={{
-                width: '18px',
-                height: '18px',
-              }}
+              size={19}
             />
           )}
         </button>
@@ -284,15 +484,10 @@ const JobCard = ({
         <button
           type="button"
           onClick={handleShare}
-          className="p-2 rounded-lg border border-slate-300 text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-slate-700 transition"
           title="Share job"
+          className="w-11 h-11 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center transition"
         >
-          <Share2
-            style={{
-              width: '18px',
-              height: '18px',
-            }}
-          />
+          <Share2 size={19} />
         </button>
 
       </div>
@@ -301,6 +496,12 @@ const JobCard = ({
   )
 }
 
+// =====================================================
+// EXPORTS
+// IMPORTANT: Both exports are included so this works:
+// import JobCard from './JobCard'
+// AND
+// import { JobCard } from './JobCard'
+// =====================================================
 export { JobCard }
-
 export default JobCard

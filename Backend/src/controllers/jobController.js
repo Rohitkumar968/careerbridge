@@ -181,11 +181,7 @@ const getSavedJobs = async (req, res, next) => {
 // GET /api/jobs/recommended
 // =====================================================
 
-const getRecommendedJobs = async (
-  req,
-  res,
-  next
-) => {
+const getRecommendedJobs = async (req, res, next) => {
   try {
     const user =
       await User.findById(req.user._id)
@@ -197,34 +193,77 @@ const getRecommendedJobs = async (
       })
     }
 
-    const query = {
-      status: 'active',
+    // Get user's skills
+    const userSkills = Array.isArray(user.skills)
+      ? user.skills.filter(Boolean)
+      : []
+
+    // =========================================
+    // 1. First get jobs matching user skills
+    // =========================================
+
+    let recommendedJobs = []
+
+    if (userSkills.length > 0) {
+      recommendedJobs =
+        await Job.find({
+          status: 'active',
+          skills: {
+            $in: userSkills.map(
+              (skill) =>
+                new RegExp(skill, 'i')
+            ),
+          },
+        })
+          .populate(
+            'company',
+            'name logo location industry'
+          )
+          .sort('-createdAt')
+          .limit(6)
     }
 
-    if (
-      Array.isArray(user.skills) &&
-      user.skills.length > 0
-    ) {
-      query.skills = {
-        $in: user.skills.map(
-          (skill) =>
-            new RegExp(skill, 'i')
-        ),
-      }
-    }
+    // =========================================
+    // 2. If less than 6 matching jobs,
+    //    fill remaining slots with other
+    //    active jobs
+    // =========================================
 
-    const jobs =
-      await Job.find(query)
-        .populate(
-          'company',
-          'name logo location industry'
+    if (recommendedJobs.length < 6) {
+      const existingIds =
+        recommendedJobs.map(
+          (job) => job._id
         )
-        .sort('-createdAt')
-        .limit(6)
+
+      const remainingJobs =
+        await Job.find({
+          status: 'active',
+          _id: {
+            $nin: existingIds,
+          },
+        })
+          .populate(
+            'company',
+            'name logo location industry'
+          )
+          .sort('-createdAt')
+          .limit(
+            6 - recommendedJobs.length
+          )
+
+      recommendedJobs = [
+        ...recommendedJobs,
+        ...remainingJobs,
+      ]
+    }
+
+    // =========================================
+    // 3. Return jobs
+    // =========================================
 
     return res.json({
       success: true,
-      data: jobs,
+      data: recommendedJobs,
     })
   } catch (err) {
     next(err)
