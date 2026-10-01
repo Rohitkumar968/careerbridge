@@ -9,19 +9,16 @@ const today = new Date()
 // DATE HELPERS
 // =====================================================
 
-// Add / subtract days from current date
 const addDays = (days) => {
   const date = new Date(today)
   date.setDate(date.getDate() + days)
   return date
 }
 
-// Convert date to YYYY-MM-DD
 const formatDate = (date) => {
   return date.toISOString().split('T')[0]
 }
 
-// Display date
 export const formatDisplayDate = (date) => {
   return new Date(date).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -232,6 +229,51 @@ export const mockCompanies = [
     reviews: 156,
     activeJobs: 5,
   },
+
+  {
+    id: 4,
+    name: 'CloudSystems',
+    logo: avatar('CloudSystems'),
+    website: 'https://cloudsystems.com',
+    industry: 'Cloud Computing',
+    size: '500-1000',
+    location: 'Seattle, WA',
+    description:
+      'Cloud technology company providing scalable infrastructure and DevOps solutions.',
+    rating: 4.4,
+    reviews: 120,
+    activeJobs: 7,
+  },
+
+  {
+    id: 5,
+    name: 'InnovateCo',
+    logo: avatar('InnovateCo'),
+    website: 'https://innovateco.com',
+    industry: 'Technology',
+    size: '200-500',
+    location: 'Boston, MA',
+    description:
+      'Innovative technology company creating products for modern businesses.',
+    rating: 4.3,
+    reviews: 98,
+    activeJobs: 6,
+  },
+
+  {
+    id: 6,
+    name: 'DataFlow',
+    logo: avatar('DataFlow'),
+    website: 'https://dataflow.com',
+    industry: 'Data & Analytics',
+    size: '100-500',
+    location: 'Austin, TX',
+    description:
+      'Data engineering company building scalable analytics and backend solutions.',
+    rating: 4.6,
+    reviews: 145,
+    activeJobs: 9,
+  },
 ]
 
 // =====================================================
@@ -283,16 +325,10 @@ export const mockInterviews = [
     company: 'TechCorp',
     position: 'Senior React Developer',
     interviewer: 'John Smith',
-
-    // 3 days from today
     date: formatDate(addDays(3)),
-
     time: '10:00 AM',
     type: 'Technical',
-
-    // Google Meet
     meetingLink: 'https://meet.google.com/tpn-anoj-snw',
-
     status: 'scheduled',
   },
 
@@ -301,16 +337,10 @@ export const mockInterviews = [
     company: 'DesignStudio',
     position: 'UI/UX Designer',
     interviewer: 'Sarah Johnson',
-
-    // 6 days from today
     date: formatDate(addDays(6)),
-
     time: '2:00 PM',
     type: 'HR Round',
-
-    // Google Meet
     meetingLink: 'https://meet.google.com/tpn-anoj-snw',
-
     status: 'scheduled',
   },
 
@@ -319,16 +349,10 @@ export const mockInterviews = [
     company: 'StartupXYZ',
     position: 'Full Stack MERN Developer',
     interviewer: 'Michael Brown',
-
-    // 10 days from today
     date: formatDate(addDays(10)),
-
     time: '11:30 AM',
     type: 'Technical',
-
-    // Google Meet
     meetingLink: 'https://meet.google.com/tpn-anoj-snw',
-
     status: 'scheduled',
   },
 ]
@@ -352,10 +376,9 @@ export const mockNotifications = [
     id: 2,
     type: 'interview',
     title: 'Interview Scheduled',
-    message:
-      `Your interview with TechCorp is scheduled for ${formatDisplayDate(
-        addDays(3)
-      )}.`,
+    message: `Your interview with TechCorp is scheduled for ${formatDisplayDate(
+      addDays(3)
+    )}.`,
     read: false,
     timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
   },

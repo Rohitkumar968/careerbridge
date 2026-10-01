@@ -1,1 +1,7 @@
 export { AdminDashboard } from './Dashboard'
+export { default as AdminUsers } from './Users'
+export { default as AdminJobs } from './Jobs'
+export { default as AdminCompanies } from './Companies'
+export { default as AdminApplications } from './Applications'
+export { default as AdminReports } from './Reports'
+export { default as AdminSettings } from './Settings'

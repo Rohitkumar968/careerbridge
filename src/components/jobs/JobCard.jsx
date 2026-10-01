@@ -11,6 +11,79 @@ import {
 } from 'lucide-react'
 import { Badge, Button } from '../common'
 
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  'https://careerbridge-r5yo.onrender.com/api'
+
+// =====================================================
+// CREATE LOCAL FALLBACK LOGO
+// No external image required
+// =====================================================
+
+const createFallbackLogo = (name = 'Company') => {
+  const firstLetter =
+    name.trim().charAt(0).toUpperCase() || 'C'
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+      <rect width="128" height="128" rx="24" fill="#6366f1"/>
+      <text
+        x="50%"
+        y="54%"
+        dominant-baseline="middle"
+        text-anchor="middle"
+        font-family="Arial, sans-serif"
+        font-size="58"
+        font-weight="700"
+        fill="white"
+      >
+        ${firstLetter}
+      </text>
+    </svg>
+  `
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
+}
+
+// =====================================================
+// NORMALIZE IMAGE URL
+// =====================================================
+
+const getImageUrl = (image, fallback) => {
+  if (!image || typeof image !== 'string') {
+    return fallback
+  }
+
+  const value = image.trim()
+
+  if (!value) {
+    return fallback
+  }
+
+  // Already a complete URL
+  if (
+    value.startsWith('http://') ||
+    value.startsWith('https://') ||
+    value.startsWith('data:image/')
+  ) {
+    return value
+  }
+
+  // Backend relative upload path
+  if (value.startsWith('/')) {
+    const backendOrigin = API_URL.replace(/\/api\/?$/, '')
+    return `${backendOrigin}${value}`
+  }
+
+  // Relative upload path without /
+  const backendOrigin = API_URL.replace(/\/api\/?$/, '')
+  return `${backendOrigin}/${value}`
+}
+
+// =====================================================
+// JOB CARD
+// =====================================================
+
 const JobCard = ({
   job,
   onSave,
@@ -19,74 +92,122 @@ const JobCard = ({
   showMatchScore = false,
 }) => {
   // =====================================================
+  // INVALID JOB
+  // =====================================================
+
+  if (!job) {
+    return null
+  }
+
+  // =====================================================
   // JOB ID
-  // IMPORTANT: Prefer MongoDB _id
+  // Prefer MongoDB _id
   // =====================================================
-  const jobId = job?._id || job?.id
+
+  const jobId = job._id || job.id
+
+  if (!jobId) {
+    return null
+  }
 
   // =====================================================
-  // COMPANY
+  // COMPANY NAME
   // =====================================================
+
   const companyName =
-    job?.company?.name ||
-    (typeof job?.company === 'string'
-      ? job.company
-      : '') ||
-    job?.companyName ||
-    'Company'
+    typeof job.company === 'object'
+      ? job.company?.name ||
+        job.company?.companyName ||
+        'Company'
+      : job.company ||
+        job.companyName ||
+        'Company'
 
-  const companyLogo =
-    job?.company?.logo ||
-    job?.companyLogo ||
-    job?.logo ||
-    ''
+  // =====================================================
+  // FALLBACK LOGO
+  // =====================================================
 
   const fallbackLogo =
-    'https://ui-avatars.com/api/?name=' +
-    encodeURIComponent(companyName) +
-    '&background=6366f1&color=fff&size=128'
-
-  const logoUrl =
-    companyLogo || fallbackLogo
+    createFallbackLogo(companyName)
 
   // =====================================================
-  // JOB INFORMATION
+  // COMPANY LOGO
+  // Supports multiple backend formats
   // =====================================================
+
+  const rawCompanyLogo =
+    typeof job.company === 'object'
+      ? job.company?.logo ||
+        job.company?.logoUrl ||
+        job.company?.image ||
+        ''
+      : ''
+
+  const rawLogo =
+    rawCompanyLogo ||
+    job.companyLogo ||
+    job.logo ||
+    job.logoUrl ||
+    job.image ||
+    ''
+
+  const logoUrl = getImageUrl(
+    rawLogo,
+    fallbackLogo
+  )
+
+  // =====================================================
+  // LOCATION
+  // =====================================================
+
   const location =
-    job?.location ||
-    job?.company?.location ||
+    job.location ||
+    (typeof job.company === 'object'
+      ? job.company?.location
+      : '') ||
     'Location not specified'
 
+  // =====================================================
+  // JOB TYPE
+  // =====================================================
+
   const jobType =
-    job?.employmentType ||
-    job?.jobType ||
+    job.employmentType ||
+    job.jobType ||
+    job.type ||
     'Full-time'
 
+  // =====================================================
+  // EXPERIENCE
+  // =====================================================
+
   const experience =
-    job?.experienceLevel ||
-    job?.experience ||
+    job.experienceLevel ||
+    job.experience ||
     'Not specified'
 
+  // =====================================================
+  // WORK MODE
+  // =====================================================
+
   const workMode =
-    job?.workMode ||
-    (job?.remote === true
+    job.workMode ||
+    (job.remote === true
       ? 'Remote'
       : '')
 
   // =====================================================
   // SALARY
-  // Supports:
-  // salary: { min, max }
-  // salaryMin / salaryMax
   // =====================================================
+
   const salaryMin =
-    job?.salary?.min ??
-    job?.salaryMin ??
+    job.salary?.min ??
+    job.salaryMin ??
     null
 
   const salaryMax =
-    job?.salary?.max ??
-    job?.salaryMax ??
+    job.salary?.max ??
+    job.salaryMax ??
     null
 
   const hasSalary =
@@ -102,11 +223,13 @@ const JobCard = ({
       return ''
     }
 
-    if (typeof value === 'number') {
+    if (
+      typeof value === 'number'
+    ) {
       return value.toLocaleString('en-IN')
     }
 
-    return value
+    return String(value)
   }
 
   const salaryText = (() => {
@@ -120,7 +243,9 @@ const JobCard = ({
     ) {
       return `${formatSalary(
         salaryMin
-      )} - ${formatSalary(salaryMax)}`
+      )} - ${formatSalary(
+        salaryMax
+      )}`
     }
 
     if (salaryMin !== null) {
@@ -137,21 +262,24 @@ const JobCard = ({
   // =====================================================
   // SKILLS
   // =====================================================
-  const skills = Array.isArray(job?.skills)
+
+  const skills = Array.isArray(job.skills)
     ? job.skills
     : []
 
   // =====================================================
   // MATCH SCORE
   // =====================================================
+
   const matchScore =
-    job?.matchScore ??
-    job?.matchPercentage ??
+    job.matchScore ??
+    job.matchPercentage ??
     null
 
   // =====================================================
   // IMAGE ERROR
   // =====================================================
+
   const handleImageError = (event) => {
     if (
       event.currentTarget.src !==
@@ -165,6 +293,7 @@ const JobCard = ({
   // =====================================================
   // SAVE / UNSAVE
   // =====================================================
+
   const handleSave = (event) => {
     event.preventDefault()
     event.stopPropagation()
@@ -185,6 +314,7 @@ const JobCard = ({
   // =====================================================
   // SHARE
   // =====================================================
+
   const handleShare = async (event) => {
     event.preventDefault()
     event.stopPropagation()
@@ -198,12 +328,12 @@ const JobCard = ({
 
     const shareData = {
       title:
-        job?.title ||
+        job.title ||
         'Job Opportunity',
 
       text:
         `Check out this job: ${
-          job?.title ||
+          job.title ||
           'Job Opportunity'
         } at ${companyName}`,
 
@@ -235,7 +365,7 @@ const JobCard = ({
         return
       }
 
-      // Fallback clipboard
+      // Old browser fallback
       const textArea =
         document.createElement(
           'textarea'
@@ -278,35 +408,37 @@ const JobCard = ({
   }
 
   // =====================================================
-  // INVALID JOB
-  // =====================================================
-  if (!jobId) {
-    return null
-  }
-
-  // =====================================================
   // UI
   // =====================================================
+
   return (
     <div className="group bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-card hover:shadow-card-hover transition-all duration-200 p-5 flex flex-col">
 
       {/* =================================================
           HEADER
       ================================================= */}
+
       <div className="flex items-start justify-between gap-4 mb-4">
 
         <div className="flex items-center gap-3 min-w-0">
 
           {/* Company Logo */}
-          <img
-            src={logoUrl}
-            alt={companyName}
-            onError={handleImageError}
-            className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 flex-shrink-0"
-          />
+
+          <div className="w-12 h-12 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 flex-shrink-0">
+
+            <img
+              src={logoUrl}
+              alt={`${companyName} logo`}
+              onError={handleImageError}
+              className="w-full h-full object-cover"
+            />
+
+          </div>
 
           {/* Company */}
+
           <div className="min-w-0">
+
             <h3 className="font-semibold text-gray-900 dark:text-white truncate">
               {companyName}
             </h3>
@@ -314,17 +446,24 @@ const JobCard = ({
             <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
               {location}
             </p>
+
           </div>
 
         </div>
 
         {/* Match Score */}
+
         {showMatchScore &&
           matchScore !== null && (
+
             <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-xs font-semibold flex-shrink-0">
+
               <Zap size={13} />
+
               {matchScore}%
+
             </div>
+
           )}
 
       </div>
@@ -332,14 +471,17 @@ const JobCard = ({
       {/* =================================================
           JOB TITLE
       ================================================= */}
+
       <div className="mb-4">
 
         <h2 className="text-lg font-bold text-gray-900 dark:text-white line-clamp-2">
-          {job?.title ||
+
+          {job.title ||
             'Untitled Job'}
+
         </h2>
 
-        {job?.category && (
+        {job.category && (
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {job.category}
           </p>
@@ -350,10 +492,13 @@ const JobCard = ({
       {/* =================================================
           JOB META
       ================================================= */}
+
       <div className="space-y-2.5 mb-4">
 
         {/* Location */}
+
         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+
           <MapPin
             size={16}
             className="flex-shrink-0"
@@ -362,10 +507,13 @@ const JobCard = ({
           <span className="truncate">
             {location}
           </span>
+
         </div>
 
         {/* Job Type */}
+
         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+
           <Briefcase
             size={16}
             className="flex-shrink-0"
@@ -386,10 +534,13 @@ const JobCard = ({
               </span>
             </>
           )}
+
         </div>
 
         {/* Salary */}
+
         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+
           <DollarSign
             size={16}
             className="flex-shrink-0"
@@ -398,14 +549,19 @@ const JobCard = ({
           <span className="truncate">
             {salaryText}
           </span>
+
         </div>
 
         {/* Experience */}
+
         <div className="text-sm text-gray-600 dark:text-gray-300">
+
           <span className="font-medium">
             Experience:
           </span>{' '}
+
           {experience}
+
         </div>
 
       </div>
@@ -413,48 +569,62 @@ const JobCard = ({
       {/* =================================================
           SKILLS
       ================================================= */}
+
       {skills.length > 0 && (
+
         <div className="flex flex-wrap gap-2 mb-5">
 
           {skills
             .slice(0, 5)
             .map((skill, index) => (
+
               <Badge
                 key={`${skill}-${index}`}
                 variant="secondary"
               >
                 {skill}
               </Badge>
+
             ))}
 
           {skills.length > 5 && (
+
             <span className="text-xs text-gray-500 dark:text-gray-400 self-center">
+
               +{skills.length - 5}
+
             </span>
+
           )}
 
         </div>
+
       )}
 
       {/* =================================================
-          FOOTER BUTTONS
+          FOOTER
       ================================================= */}
+
       <div className="flex gap-2 mt-auto">
 
         {/* View Details */}
+
         <Link
           to={`/jobs/${jobId}`}
           className="flex-1"
         >
+
           <Button
             variant="primary"
             className="w-full"
           >
             View Details
           </Button>
+
         </Link>
 
         {/* Save / Unsave */}
+
         <button
           type="button"
           onClick={handleSave}
@@ -469,25 +639,26 @@ const JobCard = ({
               : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
           }`}
         >
+
           {isSaved ? (
-            <BookmarkCheck
-              size={19}
-            />
+            <BookmarkCheck size={19} />
           ) : (
-            <Bookmark
-              size={19}
-            />
+            <Bookmark size={19} />
           )}
+
         </button>
 
         {/* Share */}
+
         <button
           type="button"
           onClick={handleShare}
           title="Share job"
           className="w-11 h-11 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center transition"
         >
+
           <Share2 size={19} />
+
         </button>
 
       </div>
@@ -498,10 +669,8 @@ const JobCard = ({
 
 // =====================================================
 // EXPORTS
-// IMPORTANT: Both exports are included so this works:
-// import JobCard from './JobCard'
-// AND
-// import { JobCard } from './JobCard'
 // =====================================================
+
 export { JobCard }
+
 export default JobCard

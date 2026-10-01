@@ -1,10 +1,33 @@
 import React, { useEffect, useState } from 'react'
+import { useSelector } from 'react-redux'
 import { Filter, X } from 'lucide-react'
-import { Button, Input, Select, Card, LoadingSpinner } from '../../components/common'
+import {
+  Button,
+  Input,
+  Select,
+  Card,
+  LoadingSpinner,
+} from '../../components/common'
 import { JobCard } from '../../components/jobs'
 import api from '../../services/api'
 
 export const JobsPage = () => {
+  // =====================================================
+  // AUTH
+  // =====================================================
+
+  const { user, isAuthenticated } = useSelector(
+    (state) => state.auth
+  )
+
+  const isJobSeeker =
+    isAuthenticated &&
+    ['job_seeker', 'seeker'].includes(user?.role)
+
+  // =====================================================
+  // STATE
+  // =====================================================
+
   const [jobs, setJobs] = useState([])
   const [filteredJobs, setFilteredJobs] = useState([])
   const [savedJobs, setSavedJobs] = useState([])
@@ -49,7 +72,7 @@ export const JobsPage = () => {
 
       setError(
         err.response?.data?.message ||
-        'Failed to load jobs.'
+          'Failed to load jobs.'
       )
     } finally {
       setLoading(false)
@@ -58,9 +81,16 @@ export const JobsPage = () => {
 
   // =====================================================
   // LOAD SAVED JOBS
+  // ONLY FOR JOB SEEKERS
   // =====================================================
 
   const loadSavedJobs = async () => {
+    // Prevent seeker-only API call for admin/recruiter/guest
+    if (!isJobSeeker) {
+      setSavedJobs([])
+      return
+    }
+
     try {
       const response = await api.get('/jobs/saved')
 
@@ -74,11 +104,16 @@ export const JobsPage = () => {
         )
       )
     } catch (err) {
-      console.error('Load saved jobs error:', err)
+      console.error(
+        'Load saved jobs error:',
+        err
+      )
 
-      // Don't break jobs page if saved jobs fails
+      // Do not break jobs page if saved jobs fails
       if (err.response?.status !== 401) {
-        console.warn('Could not load saved jobs')
+        console.warn(
+          'Could not load saved jobs'
+        )
       }
     }
   }
@@ -89,8 +124,13 @@ export const JobsPage = () => {
 
   useEffect(() => {
     loadJobs()
-    loadSavedJobs()
-  }, [])
+
+    if (isJobSeeker) {
+      loadSavedJobs()
+    } else {
+      setSavedJobs([])
+    }
+  }, [isJobSeeker])
 
   // =====================================================
   // NORMALIZE JOB
@@ -107,7 +147,8 @@ export const JobsPage = () => {
 
       id: job._id || job.id,
 
-      title: job.title || 'Untitled Job',
+      title:
+        job.title || 'Untitled Job',
 
       company:
         company?.name ||
@@ -134,19 +175,17 @@ export const JobsPage = () => {
         'Entry Level',
 
       salary: {
-        min:
-          Number(
-            job.salary?.min ??
+        min: Number(
+          job.salary?.min ??
             job.salaryMin ??
             0
-          ),
+        ),
 
-        max:
-          Number(
-            job.salary?.max ??
+        max: Number(
+          job.salary?.max ??
             job.salaryMax ??
             0
-          ),
+        ),
       },
 
       skills: Array.isArray(job.skills)
@@ -203,7 +242,8 @@ export const JobsPage = () => {
 
       const matchJobType =
         !currentFilters.jobType ||
-        job.jobType === currentFilters.jobType
+        job.jobType ===
+          currentFilters.jobType
 
       const matchExperience =
         !currentFilters.experienceLevel ||
@@ -215,9 +255,13 @@ export const JobsPage = () => {
 
       const matchSalary =
         job.salary.max >=
-          Number(currentFilters.salaryMin) &&
+          Number(
+            currentFilters.salaryMin
+          ) &&
         job.salary.min <=
-          Number(currentFilters.salaryMax)
+          Number(
+            currentFilters.salaryMax
+          )
 
       const matchRemote =
         !currentFilters.remote ||
@@ -304,9 +348,14 @@ export const JobsPage = () => {
 
   // =====================================================
   // SAVE / UNSAVE JOB
+  // ONLY FOR JOB SEEKERS
   // =====================================================
 
   const handleSaveJob = async (jobId) => {
+    if (!isJobSeeker) {
+      return
+    }
+
     try {
       setError('')
 
@@ -341,7 +390,7 @@ export const JobsPage = () => {
 
       setError(
         err.response?.data?.message ||
-        'Unable to save job.'
+          'Unable to save job.'
       )
     }
   }
@@ -362,7 +411,10 @@ export const JobsPage = () => {
     }
 
     setFilters(reset)
-    applyFilters(reset, sort)
+    applyFilters(
+      reset,
+      sort
+    )
   }
 
   // =====================================================
@@ -375,6 +427,7 @@ export const JobsPage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Card className="py-16">
             <LoadingSpinner />
+
             <p className="text-center text-gray-600 dark:text-gray-400 mt-4">
               Loading jobs...
             </p>
@@ -496,7 +549,9 @@ export const JobsPage = () => {
 
                 <Select
                   label="Experience Level"
-                  value={filters.experienceLevel}
+                  value={
+                    filters.experienceLevel
+                  }
                   onChange={(e) =>
                     handleFilterChange(
                       'experienceLevel',
@@ -534,7 +589,9 @@ export const JobsPage = () => {
                     min="0"
                     max="200000"
                     step="10000"
-                    value={filters.salaryMax}
+                    value={
+                      filters.salaryMax
+                    }
                     onChange={(e) =>
                       handleFilterChange(
                         'salaryMax',
@@ -550,7 +607,9 @@ export const JobsPage = () => {
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={filters.remote}
+                    checked={
+                      filters.remote
+                    }
                     onChange={(e) =>
                       handleFilterChange(
                         'remote',
@@ -661,6 +720,7 @@ export const JobsPage = () => {
 
               </div>
             )}
+
           </div>
         </div>
       </div>

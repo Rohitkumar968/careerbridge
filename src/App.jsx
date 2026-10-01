@@ -49,7 +49,15 @@ import {
 } from './pages/recruiter'
 
 // Admin Pages
-import { AdminDashboard } from './pages/admin'
+import {
+  AdminDashboard,
+  AdminUsers,
+  AdminJobs,
+  AdminCompanies,
+  AdminApplications,
+  AdminReports,
+  AdminSettings,
+} from './pages/admin'
 
 // Protected Route
 import ProtectedRoute from './routes/ProtectedRoute'
@@ -138,19 +146,16 @@ function App() {
           }
         >
 
-          {/* Dashboard */}
           <Route
             path="/dashboard"
             element={<SeekerDashboard />}
           />
 
-          {/* Jobs */}
           <Route
             path="/dashboard/jobs"
             element={<JobsPage />}
           />
 
-          {/* Applications */}
           <Route
             path="/dashboard/applications"
             element={<ApplicationsPage />}
@@ -161,7 +166,6 @@ function App() {
             element={<ApplicationDetailsPage />}
           />
 
-          {/* Interviews */}
           <Route
             path="/dashboard/interviews"
             element={<InterviewsPage />}
@@ -172,43 +176,36 @@ function App() {
             element={<InterviewDetailsPage />}
           />
 
-          {/* Resume */}
           <Route
             path="/dashboard/resume"
             element={<ResumePage />}
           />
 
-          {/* AI Assistant */}
           <Route
             path="/dashboard/ai-assistant"
             element={<AIAssistantPage />}
           />
 
-          {/* Recommended Jobs */}
           <Route
             path="/dashboard/recommended"
             element={<RecommendationsPage />}
           />
 
-          {/* Saved Jobs */}
           <Route
             path="/dashboard/saved"
             element={<SavedJobsPage />}
           />
 
-          {/* Profile */}
           <Route
             path="/profile"
             element={<ProfilePage />}
           />
 
-          {/* Notifications */}
           <Route
             path="/notifications"
             element={<NotificationsPage />}
           />
 
-          {/* Settings */}
           <Route
             path="/settings"
             element={<SettingsPage />}
@@ -229,19 +226,16 @@ function App() {
           }
         >
 
-          {/* Recruiter Dashboard */}
           <Route
             path="/recruiter"
             element={<RecruiterDashboard />}
           />
 
-          {/* Post New Job */}
           <Route
             path="/recruiter/jobs/create"
             element={<PostJobPage />}
           />
 
-          {/* Schedule & Manage Interviews */}
           <Route
             path="/recruiter/interviews/schedule"
             element={<ScheduleInterviewPage />}
@@ -262,9 +256,46 @@ function App() {
           }
         >
 
+          {/* Overview */}
           <Route
             path="/admin"
             element={<AdminDashboard />}
+          />
+
+          {/* Users */}
+          <Route
+            path="/admin/users"
+            element={<AdminUsers />}
+          />
+
+          {/* Jobs */}
+          <Route
+            path="/admin/jobs"
+            element={<AdminJobs />}
+          />
+
+          {/* Companies */}
+          <Route
+            path="/admin/companies"
+            element={<AdminCompanies />}
+          />
+
+          {/* Applications */}
+          <Route
+            path="/admin/applications"
+            element={<AdminApplications />}
+          />
+
+          {/* Reports */}
+          <Route
+            path="/admin/reports"
+            element={<AdminReports />}
+          />
+
+          {/* Settings */}
+          <Route
+            path="/admin/settings"
+            element={<AdminSettings />}
           />
 
         </Route>
